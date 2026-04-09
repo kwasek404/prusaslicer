@@ -1,0 +1,79 @@
+---
+- name: Build and flash Klipper firmware
+  hosts: klipper
+
+  vars:
+    klipper_dir: /home/kwasek/klipper
+    serial_device: /dev/serial/by-id/usb-1a86_USB_Serial-if00-port0
+    board_type: creality-v4.2.7
+
+  handlers:
+    - name: Start klipper
+      ansible.builtin.systemd:
+        name: klipper
+        state: started
+      become: true
+
+  tasks:
+    - name: Copy firmware config
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../klipper/firmware.config"
+        dest: "{{ klipper_dir }}/.config"
+        owner: kwasek
+        group: kwasek
+        mode: "0644"
+
+    - name: Clean previous build
+      ansible.builtin.command:
+        cmd: make clean
+        chdir: "{{ klipper_dir }}"
+      changed_when: true
+
+    - name: Build firmware
+      ansible.builtin.shell:
+        cmd: make -j$(nproc)
+        chdir: "{{ klipper_dir }}"
+      changed_when: true
+
+    - name: Stop klipper before flashing
+      ansible.builtin.systemd:
+        name: klipper
+        state: stopped
+      become: true
+
+    - name: Wait for serial port release
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: Flash firmware via SD card
+      ansible.builtin.command:
+        cmd: >-
+          {{ klipper_dir }}/scripts/flash-sdcard.sh
+          {{ serial_device }}
+          {{ board_type }}
+      register: flash_result
+      notify: Start klipper
+
+    - name: Show flash output
+      ansible.builtin.debug:
+        var: flash_result.stdout_lines
+
+    - name: Start klipper after flash
+      ansible.builtin.systemd:
+        name: klipper
+        state: started
+      become: true
+
+    - name: Wait for klipper to initialize
+      ansible.builtin.pause:
+        seconds: 5
+
+    - name: Check klipper log for MCU version
+      ansible.builtin.shell:
+        cmd: tail -50 /home/kwasek/printer_data/logs/klippy.log | grep -E "(MCU|mcu|micro-controller|version)"
+      register: mcu_check
+      changed_when: false
+
+    - name: Show MCU version info
+      ansible.builtin.debug:
+        var: mcu_check.stdout_lines

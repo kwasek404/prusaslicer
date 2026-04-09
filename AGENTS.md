@@ -105,6 +105,28 @@ cd ansible && ansible-playbook fetch.yml
 
 This overwrites `klipper/printer.cfg` with the remote version. Review with `git diff`, then commit or `git checkout -- klipper/printer.cfg` to discard.
 
+To build and flash MCU firmware (e.g., after Klipper host update):
+
+```bash
+cd ansible && ansible-playbook flash-firmware.yml
+```
+
+- Copies `klipper/firmware.config` as `.config` to the remote Klipper source tree
+- Runs `make clean && make` to build `klipper.bin`
+- Stops Klipper service
+- Flashes firmware via `~/klipper/scripts/flash-sdcard.sh` using USB serial (`/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0`, board `creality-v4.2.7`)
+- Starts Klipper service and checks MCU version in logs
+- The firmware config (`klipper/firmware.config`) is version-controlled - update it here if menuconfig settings change
+
+**After the playbook completes, a full power cycle is required:**
+
+1. Stop Klipper: `ansible klipper -b -m systemd -a "name=klipper state=stopped"`
+2. Power off the printer at the power strip (USB must also lose power)
+3. Wait a few seconds, then power everything back on
+4. The Creality v4.2.7 bootloader loads the new firmware from its internal SD card during cold boot
+5. Klipper will start automatically (systemd `Restart=always`)
+6. Verify: check `klippy.log` for `Loaded MCU 'mcu'` line - the version must match `Git version` in the same log
+
 ## Agent Responsibilities
 
 When modifying `klipper/printer.cfg`, the agent must:
