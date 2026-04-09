@@ -118,6 +118,10 @@ cd ansible && ansible-playbook flash-firmware.yml
 - Starts Klipper service and checks MCU version in logs
 - The firmware config (`klipper/firmware.config`) is version-controlled - update it here if menuconfig settings change
 
+**WARNING - firmware.config must be the full `make olddefconfig` output, not just the manually selected options from `make menuconfig`.** The Kconfig system treats missing keys as disabled. A minimal config with only "positive" options will produce firmware missing critical peripherals (ADC, SPI, I2C, sensors) - the MCU will boot but Klipper will fail with `MCU Protocol error: Firmware constant 'ADC_MAX' not found`. After changing menuconfig settings, always run `make olddefconfig` and commit the resulting `.config` as `klipper/firmware.config`.
+
+When upgrading Klipper, new Kconfig options may appear. Re-run `make olddefconfig` on the remote host to expand the stored config with new defaults, then fetch and commit the updated file.
+
 **After the playbook completes, a full power cycle is required:**
 
 1. Stop Klipper: `ansible klipper -b -m systemd -a "name=klipper state=stopped"`
