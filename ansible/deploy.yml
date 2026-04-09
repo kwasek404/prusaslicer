@@ -1,0 +1,21 @@
+---
+- name: Deploy Klipper configuration
+  hosts: klipper
+  become: true
+
+  tasks:
+    - name: Deploy printer.cfg
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../klipper/printer.cfg"
+        dest: /home/kwasek/printer_data/config/printer.cfg
+        owner: kwasek
+        group: kwasek
+        mode: "0644"
+        backup: true
+      notify: Restart Klipper
+
+  handlers:
+    - name: Restart Klipper
+      ansible.builtin.systemd:
+        name: klipper
+        state: restarted

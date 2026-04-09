@@ -1,0 +1,10 @@
+---
+- name: Fetch Klipper configuration from remote
+  hosts: klipper
+
+  tasks:
+    - name: Fetch printer.cfg
+      ansible.builtin.fetch:
+        src: /home/kwasek/printer_data/config/printer.cfg
+        dest: "{{ playbook_dir }}/../klipper/printer.cfg"
+        flat: true

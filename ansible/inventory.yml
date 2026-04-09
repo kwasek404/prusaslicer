@@ -1,0 +1,5 @@
+all:
+  hosts:
+    klipper:
+      ansible_host: klipper.i.kwasek.org
+      ansible_user: kwasek
