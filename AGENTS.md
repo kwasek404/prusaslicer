@@ -4,6 +4,34 @@
 
 Personal PrusaSlicer + Klipper configuration for a Creality Ender-3 with BLTouch. No source code, no build system, no CI - this is a dotfiles-style repo of INI profiles and Klipper firmware config, symlinked into `~/.config/PrusaSlicer/` (Linux) or `%APPDATA%\PrusaSlicer` (Windows). See `README.md` for installation.
 
+## Hardware
+
+Heavily modified Creality Ender-3, cartesian kinematics.
+
+| Component | Details |
+|---|---|
+| **Board** | Creality v4.2.7 (STM32F103), stock A4988 stepper drivers (no TMC2209) |
+| **Firmware** | Klipper via USB serial |
+| **X-axis** | V-slot with rubber rollers. Known bent/warped gantry bar causing 0.1-0.3mm left-to-right deviation after CRTouch compensation. Compensated via `[axis_twist_compensation]` |
+| **Y-axis** | V-slot with rubber rollers |
+| **Z-axis** | Dual independent leadscrews, single stepper driver signal (no independent Z control). Manually synchronized periodically |
+| **Belts** | Non-original GT2, similar to OEM spec |
+| **Extruder** | Ender3 CR10 Redrex Dual Gear (BMG-style clone) |
+| **Bowden tube** | ~30cm length, cannot be shortened further |
+| **Hotend** | All-metal, max_temp=290C in Klipper config |
+| **Probe** | CRTouch (BLTouch compatible), used as virtual Z endstop |
+| **Bed** | Glass, mounted with 8 clips (losing ~1cm printable area per side) |
+| **Enclosure** | Insulated (foam) chamber, electronics mounted outside. Chamber reaches 45-60C during ASA/ABS prints |
+| **Part cooling** | Custom design, radial fan (~4010/5010). Blows too hard at 100% (breaks PLA layer adhesion). Hotend fan pulls air upward (does not blow on print) |
+| **Filament sensor** | Present on PA4 |
+
+### Known Mechanical Issues
+
+- **Bent X gantry**: causes first layer problems (small parts detaching on one side). Compensated in firmware via `[axis_twist_compensation]`. Would require full rebuild to fix mechanically.
+- **Dual Z not synchronized**: no mechanical or electronic sync, manual adjustment only. Must be checked periodically.
+- **max_accel=1000**: conservative value, likely can be raised after input shaper verification.
+- **Bed mesh 50x50=2500 points**: extreme density, but adaptive mesh macro scales it down per print area.
+
 ## Structure
 
 ```
