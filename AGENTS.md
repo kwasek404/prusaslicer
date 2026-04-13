@@ -25,6 +25,20 @@ Heavily modified Creality Ender-3, cartesian kinematics.
 | **Part cooling** | Custom design, radial fan (~4010/5010). Blows too hard at 100% (breaks PLA layer adhesion). Hotend fan pulls air upward (does not blow on print) |
 | **Filament sensor** | Present on PA4 |
 
+### Verified Bed Limits
+
+Glass bed 235x235mm with 1mm chamfer (frez) on each edge. 8 clips (~5mm each, 7mm safety margin). Modified frame limits nozzle travel.
+
+| Boundary | X | Y | Notes |
+|---|---|---|---|
+| Glass edge | -2.5 to 231.5 | -1 to 234 | Physical glass extent |
+| Flat surface (no chamfer) | -1.5 to 230.5 | 0 to 233 | Usable surface |
+| Nozzle travel limit | 0 to 258 | -5 to 234 | Frame constraints |
+| **Printable area (nozzle)** | **4 to 222** | **7 to 226** | Clips + safety margin |
+| **Probe area (CRTouch)** | **4 to 215** | **7 to 226** | Nozzle travel + probe offset |
+
+CRTouch offset: x_offset=-42.15, y_offset=-6.99. Probe is 42mm left and 7mm forward of nozzle. Right side of bed cannot be fully probed (probe max X=215.85 due to nozzle X max=258).
+
 ### Known Mechanical Issues
 
 - **Bent X gantry**: causes first layer problems (small parts detaching on one side). Compensated in firmware via `[axis_twist_compensation]`. Would require full rebuild to fix mechanically.
