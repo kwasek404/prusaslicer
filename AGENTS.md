@@ -173,6 +173,58 @@ When upgrading Klipper, new Kconfig options may appear. Re-run `make olddefconfi
 5. Klipper will start automatically (systemd `Restart=always`)
 6. Verify: check `klippy.log` for `Loaded MCU 'mcu'` line - the version must match `Git version` in the same log
 
+## Moonraker API Usage
+
+Host: `http://klipper.i.kwasek.org:7125`. All requests go through `bypass curl` (Crush sandbox blocks raw curl).
+
+### Request behavior
+
+Moonraker blocks the HTTP response until the G-code command finishes executing. This means:
+
+- `M109 S265` (wait for hotend temp) - response returns only after 265C is reached
+- `G28` (home all) - response returns after homing completes
+- `G1 E100 F100` (extrude 100mm) - response returns after extrusion finishes
+- `BED_MESH_CALIBRATE` - response returns after all probe points are done
+
+**Never use `sleep` before checking results.** The response itself is the completion signal. Use `--max-time` only for fire-and-forget commands (e.g., interactive wizards like `AXIS_TWIST_COMPENSATION_CALIBRATE` that require user input and never return on their own).
+
+### Common patterns
+
+```bash
+# Send G-code and wait for completion
+bypass curl -s -X POST http://klipper.i.kwasek.org:7125/printer/gcode/script \
+  -H 'Content-Type: application/json' -d '{"script": "G28"}'
+
+# Fire-and-forget (interactive commands that need user input)
+bypass curl -s -X POST http://klipper.i.kwasek.org:7125/printer/gcode/script \
+  -H 'Content-Type: application/json' -d '{"script": "AXIS_TWIST_COMPENSATION_CALIBRATE"}' \
+  --max-time 3
+
+# Read position
+bypass curl -s "http://klipper.i.kwasek.org:7125/printer/objects/query?toolhead=position"
+
+# Read temperatures
+bypass curl -s "http://klipper.i.kwasek.org:7125/printer/objects/query?extruder=temperature,target&heater_bed=temperature,target"
+
+# Read G-code console (last N messages)
+bypass curl -s "http://klipper.i.kwasek.org:7125/server/gcode_store?count=30"
+```
+
+### Interactive commands (fire-and-forget with --max-time 3)
+
+These commands start a wizard that requires user interaction via the web UI. Use `--max-time 3` to send and move on, then poll `gcode_store` for results:
+
+- `AXIS_TWIST_COMPENSATION_CALIBRATE` - paper test at multiple points
+- `PROBE_CALIBRATE` - single-point paper test
+- `SCREWS_TILT_CALCULATE` - reports screw adjustments
+- `PID_CALIBRATE` - long-running temperature oscillation test
+
+### Safety
+
+- Always lift Z before moving XY (clips are ~1mm tall)
+- After MCU shutdown (e.g., verify_heater trip), send `FIRMWARE_RESTART` before any new commands
+- `SAVE_CONFIG` auto-restarts Klipper
+
 ## Agent Responsibilities
 
 When modifying `klipper/printer.cfg`, the agent must:
