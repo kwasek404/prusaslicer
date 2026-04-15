@@ -21,16 +21,21 @@ Based on [Ellis' Print Tuning Guide](https://ellis3dp.com/Print-Tuning-Guide/).
 
 | Parameter | Current Value | Source |
 |---|---|---|
-| rotation_distance | 22.98 (commented: 24.61) | printer.cfg [extruder] |
-| pressure_advance | 0.1 (default) / **0.0 (ASA override)** | printer.cfg / filament gcode |
-| retract_length | 3.5mm | printer.cfg [firmware_retraction] |
-| retract_speed / unretract_speed | 40 / 40 mm/s | printer.cfg [firmware_retraction] |
+| rotation_distance | **22.566** | printer.cfg [extruder] |
+| pressure_advance (ASA) | **0.68** (via M221 in filament gcode) | filament gcode |
+| extrusion_multiplier (ASA) | **0.96** (via M221 S96 in filament gcode) | filament gcode |
+| retract_length (ASA) | **2.28mm** (via SET_RETRACTION in filament gcode) | filament gcode |
+| retract_speed / unretract_speed | **40 / 40 mm/s** (via SET_RETRACTION in filament gcode) | filament gcode |
 | max_accel | 1000 | printer.cfg [printer] |
 | input_shaper | mzv, X=35.9 Hz, Y=50.7 Hz | printer.cfg [input_shaper] |
-| hotend PID | Kp=21.527 Ki=1.063 Kd=108.982 | printer.cfg [extruder] |
-| bed PID | Kp=54.027 Ki=0.770 Kd=948.182 | printer.cfg [heater_bed] |
-| z_offset | 0.186 | printer.cfg [bltouch] |
-| extrusion_multiplier | 1.0 | filament profile |
+| hotend PID | **Kp=22.659 Ki=0.763 Kd=168.241** | printer.cfg [extruder] |
+| bed PID | **Kp=67.102 Ki=1.761 Kd=639.148** | printer.cfg [heater_bed] |
+| z_offset | **2.416** | printer.cfg [bltouch] |
+| axis_twist_comp X | 10 pts, range 0.146mm | printer.cfg [axis_twist_compensation] |
+| axis_twist_comp Y | 10 pts, range 0.036mm | printer.cfg [axis_twist_compensation] |
+| bed_mesh probe_count | **10x10** (adaptive per print) | printer.cfg [bed_mesh] |
+| horizontal_move_z | **5** | printer.cfg [bed_mesh] |
+| first_layer_height | **0.1** | print profiles |
 
 ---
 
@@ -163,7 +168,7 @@ Run after axis twist compensation, at operating temperature.
    SAVE_CONFIG
    ```
 
-4. The mesh is 50x50 (2500 points) - this takes ~30-45 minutes. Be patient.
+4. The mesh is **10x10** (100 points) with adaptive mesh scaling per-print area. Stale bed_mesh profiles should not be saved in SAVE_CONFIG - adaptive mesh runs fresh each print.
 
 **Pass**: Mesh visualizer (Fluidd/Mainsail) shows a smooth surface without sudden spikes. Adaptive mesh will use a subset during actual prints.
 
@@ -216,7 +221,7 @@ Resolves the conflict between 22.98 (active) and 24.61 (commented out).
 
 **Pass**: Consecutive tests extruding exactly 100.0mm (+-0.5mm). Record the final rotation_distance value here:
 
-> **New rotation_distance**: _______________
+> **New rotation_distance**: **22.566**
 
 ### 2.2 First Layer Calibration (Z Offset / Squish)
 
@@ -224,9 +229,9 @@ Printed with ASA at full operating temps.
 
 **Preparation**: Create a test gcode in PrusaSlicer:
 - Single-layer square patches, scattered across the bed (at least 5: center, four quadrants). Use patches from [Ellis test_prints](https://github.com/AndrewEllis93/Print-Tuning-Guide/tree/main/test_prints).
-- First layer height: **0.25mm** (thicker = less sensitive, easier to tune), line width: **120%** (= 0.48mm with 0.4mm nozzle).
+- First layer height: **0.1mm** (matches our print profiles), line width: **120%** (= 0.48mm with 0.4mm nozzle).
 - Bed temp: 95C, nozzle: 265C. No skirt/brim.
-- Alternatively, use a dedicated first layer test model.
+- Alternatively, use a dedicated first layer test model or a Python-generated G-code (see `docs/`).
 
 **Procedure**:
 
@@ -261,7 +266,7 @@ Printed with ASA at full operating temps.
 
 **Pass**: Uniform first layer across the entire bed. Lines visible but no gaps. Consistent adhesion in all areas (including the problem zone from the bent gantry, left side).
 
-> **New z_offset**: _______________
+> **New z_offset**: **2.416** (adjusted -0.05 from initial PROBE_CALIBRATE value of 2.466)
 
 See: [Ellis First Layer Guide](https://ellis3dp.com/Print-Tuning-Guide/articles/first_layer_squish.html) for photo examples.
 
@@ -297,9 +302,11 @@ This is the most critical step for ASA print quality and the primary suspect for
 
 **Pass**: Sharp corners on test cube. No bulging at direction changes. No stringing inside the print.
 
-> **New pressure_advance**: _______________
+> **New pressure_advance**: **0.68**
 
-**After calibration**: Update `filament/ABS ASA @ENDER3.ini` - change `SET_PRESSURE_ADVANCE ADVANCE=0.0` to `SET_PRESSURE_ADVANCE ADVANCE=<new_value>` in `start_filament_gcode`.
+**After calibration**: Update `filament/ABS ASA @ENDER3.ini` - add/change `SET_PRESSURE_ADVANCE ADVANCE=<new_value>` in `start_filament_gcode`.
+
+> **New pressure_advance**: **0.68** (Z=34mm on PA tower, PA per mm = 0.020)
 
 See: [Ellis PA Guide](https://ellis3dp.com/Print-Tuning-Guide/articles/pressure_linear_advance/pattern_method.html) for visual examples.
 
@@ -307,33 +314,30 @@ See: [Ellis PA Guide](https://ellis3dp.com/Print-Tuning-Guide/articles/pressure_
 
 Calibrate AFTER pressure advance - PA affects flow perception.
 
-**Test cube settings in PrusaSlicer**:
-- Size: 30 x 30 x 3 mm (just a few layers)
-- Infill: 30%, any pattern
-- Top solid layers: 10-11 (fills the cube almost entirely with top surface)
-- Bottom solid layers: 2
-- Top fill pattern: **Monotonic Lines** (important - avoid concentric)
-- Top solid infill line width: 100% (= 0.4mm for 0.4mm nozzle)
-- No ironing
-- Perimeters: 2
-- Nozzle: 265C, Bed: 95C
+**Method**: Python-generated G-code with 5 cubes in one print, M221 switching per-cube within each layer. This avoids PrusaSlicer's limitation of one EM per print. Generator: `docs/gen_em_test.py`.
 
-**Procedure**:
+**Test cube settings**:
+- Size: 30 x 30 x 3 mm (10 layers at 0.3mm)
+- 2 perimeters, solid monotonic line infill
+- Tick marks on front face for identification (1 tick = lowest EM, 5 ticks = highest)
+- EM values: 0.90, 0.93, 0.96, 0.99, 1.02
+- M221 S<pct> switches flow per-cube within each layer
+- PA=0.68, firmware retraction G10/G11
+- Fan: 15% from layer 1
 
-1. Print cubes at EM = 0.92, 0.94, 0.96, 0.98 (2% steps). Most filaments fall in the 0.92-0.98 range, but not all - if your best is at the edge, extend the range.
-   - In PrusaSlicer you cannot set EM per-object - print one cube at a time, changing Filament Settings -> Filament -> Extrusion multiplier between prints.
-2. Compare the **center** of the top surface (ignore edges near perimeters - small areas normally look slightly overextruded):
+**Evaluation**:
+
+1. Compare the **center** of the top surface (ignore edges near perimeters):
    - **EM too low**: Gaps between top lines, rough/textured surface, can see infill through the top.
    - **EM too high**: Lines pile up, top surface bulges, slight ridges where lines overlap excessively.
    - **Correct**: Smooth top, lines merge together with no gaps but no excess material.
-3. Narrow down: print 0.5% increments around the best value.
-4. **When in doubt, go slightly higher** - gaps in the top surface are worse than slight over-extrusion for part strength.
+2. **When in doubt, go slightly higher** - gaps in the top surface are worse than slight over-extrusion for part strength.
 
 **Pass**: Top surface of the cube is smooth with no gaps. Edges are clean. Walls are straight (no bulging).
 
-> **New extrusion_multiplier**: _______________
+> **New extrusion_multiplier**: **0.96** (M221 S96, cube 3 with 3 tick marks)
 
-**After calibration**: Update `filament/ABS ASA @ENDER3.ini` - change `extrusion_multiplier = 1` to the new value.
+**After calibration**: Add `M221 S96` to `start_filament_gcode` in `filament/ABS ASA @ENDER3.ini`. Keep PrusaSlicer's `extrusion_multiplier = 1` (Klipper-first principle - runtime override via G-code).
 
 ### 2.5 PA/EM Iteration
 
@@ -348,62 +352,67 @@ PA and EM interact. After setting EM, reprint the PA test:
 
 ---
 
-## Phase 3: Cooling and Retraction
+## Phase 3: Retraction and Cooling
 
-### 3.1 Cooling Test (ASA-Specific)
+Retraction must be calibrated BEFORE cooling - stringing from bad retraction would corrupt the speed/fan test results. Cooling test comes after, once clean travel moves are confirmed.
 
-ASA is sensitive to cooling - too much causes layer delamination, too little causes drooping overhangs.
-
-**Current settings**: 15% constant fan, dynamic fan speeds disabled, overhang fan 100/75/50/25%.
-
-1. Print an overhang test model (e.g., "All In One Micro" test or a simple overhang fan from 15 to 75 degrees).
-2. Print at current settings first (15% fan baseline).
-3. If overhangs droop badly at >45 degrees, try increasing fan to 20%, then 25%.
-4. Check layer adhesion after each test - try to break the part with your hands. If layers separate easily, fan is too high.
-5. In the **heated chamber** (45-60C ambient), ASA may tolerate less cooling than in open air.
-
-**ASA guideline**: 15-30% fan is typical. Above 30% risks delamination. The heated chamber helps maintain layer adhesion even with moderate cooling.
-
-**Pass**: Overhangs clean to 45 degrees, acceptable to 60 degrees. Part does not delaminate when bent.
-
-> **Fan speed sweet spot**: _______________% constant
-
-### 3.2 Retraction Tuning
+### 3.1 Retraction Matrix Test (Length x Speed)
 
 Calibrate AFTER pressure advance - proper PA dramatically reduces needed retraction.
 
 **Current settings**: 3.5mm @ 40/40 mm/s (firmware retraction in Klipper).
 
-**Expected outcome**: With proper PA, bowden systems typically need 1-4mm retraction. The 3.5mm may already be correct, or it may need to decrease.
+**Expected outcome**: With proper PA (0.68), bowden systems typically need 1-4mm retraction.
 
-**Procedure**:
+**Method**: Python-generated G-code with 6 column-pair towers in one print. Each tower has a different retract speed (20/30/40/50/60/70 mm/s). Retract length increases with height via `SET_RETRACTION` per layer (1.0mm at bottom to 5.0mm at top). Generator: `docs/gen_retraction_test.py`.
 
-1. Download or create a retraction tower test model. Options:
-   - Use SuperSlicer's built-in retraction tower generator
-   - Use any stringing test tower (e.g., two pillars with a bridge)
-2. Print settings:
-   - Start retraction: 1.0 mm
-   - Step: 0.5 mm per section
-   - Max retraction: 3.0 mm initially (height=7 in SuperSlicer)
-   - Retract/unretract speed: **30 mm/s** to start (Ellis recommends slower speeds)
-   - Start temperature: **275C** (10C above normal)
-   - Temp decrease: **3x10C** (prints 3 towers: 275, 265, 255)
-   - Fan: **80-100%** (small towers need extra cooling to not get melty)
-   - Arrange towers **front to back** (hottest at front, coolest at back)
-3. SuperSlicer's retraction calibration tool handles the retraction changes automatically per-layer. If using manual gcode, use `SET_RETRACTION RETRACT_LENGTH=<val>` at appropriate layer heights.
-4. Find the lowest retraction length where stringing disappears. **Choose 1-2 steps higher** than that value for safety margin.
-5. If the hotter towers are much stringier, consider lowering your normal print temperature.
-6. If stringing persists at all lengths, check:
-   - Bowden tube fitting: push the tube in and out. If it moves > 0.5mm, the collet is worn - replace it.
+**Test design**:
+- 6 column-pair towers (two 8x8mm columns 6mm apart - gap shows stringing)
+- Retract speeds: 20, 30, 40, 50, 60, 70 mm/s
+- Retract length: increases with Z from 1.0 to 5.0mm
+- Height: 50mm at 0.3mm layers
+- PA=0.68, EM=0.96 (M221 S96), fan 15%
+- Each tower clearly labeled with speed value
+
+**Evaluation**:
+
+1. For each tower (speed), find the Z height where stringing disappears.
+2. Read the retract length at that Z: `retract_length = 1.0 + (Z / 50) * 4.0`
+3. Choose the lowest speed that gives clean results (lower speed = less filament grinding).
+4. Pick retract length **1 step above** minimum clean value for safety margin.
+5. If stringing persists at all lengths, check:
+   - Bowden tube fitting: push the tube in and out. If it moves > 0.5mm, the collet is worn.
    - Hotend assembly: is the bowden tube seated against the nozzle? Any gap = stringing.
 
-**Pass**: No visible stringing between pillars at the chosen retraction length. Clean travel moves.
+**Pass**: No visible stringing between columns at the chosen retraction length/speed.
 
-> **New retract_length**: _______________mm
-> **New retract_speed**: _______________mm/s
-> **New unretract_speed**: _______________mm/s
+> **New retract_length**: **2.28mm** (Z=16mm on tower 3, formula: 1.0 + (16/50) * 4.0)
+> **New retract_speed**: **40 mm/s** (tower 3)
+> **New unretract_speed**: **40 mm/s** (same as retract)
 
 **After calibration**: Update `filament/ABS ASA @ENDER3.ini` - adjust `SET_RETRACTION RETRACT_LENGTH=<new>` in `start_filament_gcode`. If speed changes, add `RETRACT_SPEED=<s> UNRETRACT_SPEED=<s>`.
+
+### 3.2 Cooling Test (Speed/Fan Matrix)
+
+ASA is sensitive to cooling - too much causes layer delamination, too little causes drooping overhangs.
+
+**Current settings**: 15% constant fan, dynamic fan speeds disabled, overhang fan 100/75/50/25%.
+
+**Method**: Python-generated G-code with 4 hollow square towers at different print speeds (20/40/60/80 mm/s). Fan decreases with height in 5mm bands: 100% -> 80% -> 60% -> 40% -> 20% -> 10% -> 0%. Generator: `docs/gen_speed_fan_test.py`. Result: 28 combinations in one print.
+
+**Evaluation**:
+
+1. For each speed, find the minimum fan % that still gives acceptable detail (clean overhangs, no drooping).
+2. Check layer adhesion at each fan level - try to break the part with your hands. If layers separate easily, fan is too high.
+3. In the **heated chamber** (45-60C ambient), ASA may tolerate less cooling than in open air.
+4. Goal: minimum fan % for maximum layer adhesion, accepting slower speeds if needed.
+
+**ASA guideline**: 15-30% fan is typical. Above 30% risks delamination. The heated chamber helps maintain layer adhesion even with moderate cooling.
+
+**Pass**: Overhangs clean to 45 degrees at chosen speed/fan combo. Part does not delaminate when bent.
+
+> **Fan speed sweet spot**: _______________% constant
+> **Optimal print speed**: _______________mm/s
 
 ---
 
@@ -467,15 +476,20 @@ Fill in after completing each phase:
 
 | Parameter | Old Value | New Value | Changed? |
 |---|---|---|---|
-| rotation_distance | 22.98 | | |
-| z_offset | 0.186 | | |
-| pressure_advance (ASA) | 0.0 | | |
-| extrusion_multiplier (ASA) | 1.0 | | |
-| retract_length (ASA) | 3.5 | | |
-| retract_speed (ASA) | 40 | | |
+| rotation_distance | 22.98 | **22.566** | YES |
+| z_offset | 0.186 | **2.416** | YES |
+| pressure_advance (ASA) | 0.0 | **0.68** | YES |
+| extrusion_multiplier (ASA) | 1.0 | **0.96** (M221 S96) | YES |
+| retract_length (ASA) | 3.5 | **2.28** | YES |
+| retract_speed (ASA) | 40 | **40** (confirmed) | YES |
 | fan_speed (ASA) | 15% | | |
-| hotend PID (Kp/Ki/Kd) | 21.5/1.1/109 | | |
-| bed PID (Kp/Ki/Kd) | 54.0/0.8/948 | | |
+| hotend PID (Kp/Ki/Kd) | 21.5/1.1/109 | **22.7/0.8/168** | YES |
+| bed PID (Kp/Ki/Kd) | 54.0/0.8/948 | **67.1/1.8/639** | YES |
+| axis_twist X | (none) | **10 pts, 0.146mm range** | YES |
+| axis_twist Y | (none) | **10 pts, 0.036mm range** | YES |
+| bed_mesh probe_count | 50x50 | **10x10** | YES |
+| horizontal_move_z | 1 | **5** | YES |
+| first_layer_height | 0.2 | **0.1** | YES |
 | input_shaper X/Y | 35.9/50.7 mzv | | |
 | max_accel | 1000 | | |
 
@@ -490,9 +504,9 @@ Fill in after completing each phase:
    - `[input_shaper]` values (if changed, auto-saved by SAVE_CONFIG)
 
 2. **`filament/ABS ASA @ENDER3.ini`**:
-   - `extrusion_multiplier` value
    - `start_filament_gcode`: `SET_PRESSURE_ADVANCE ADVANCE=<new>`
    - `start_filament_gcode`: `SET_RETRACTION RETRACT_LENGTH=<new>` (+ speeds if changed)
+   - `start_filament_gcode`: `M221 S<pct>` for extrusion multiplier (keep `extrusion_multiplier = 1` in INI - Klipper-first principle)
    - Fan speeds if adjusted
 
 3. **Fetch updated printer.cfg after SAVE_CONFIG changes**:
@@ -526,6 +540,9 @@ SET_EXTRUDER_ROTATION_DISTANCE EXTRUDER=extruder DISTANCE=<val>
 
 # Pressure advance
 SET_PRESSURE_ADVANCE ADVANCE=<val>
+
+# Extrusion multiplier (Klipper-first - use M221 instead of slicer setting)
+M221 S<pct>                            # e.g., M221 S96 = 0.96 EM
 
 # Retraction
 SET_RETRACTION RETRACT_LENGTH=<len> RETRACT_SPEED=<spd> UNRETRACT_SPEED=<spd>

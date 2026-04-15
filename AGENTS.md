@@ -109,13 +109,23 @@ Filament profiles use `start_filament_gcode` to override Klipper's firmware retr
 ```
 SET_PRESSURE_ADVANCE ADVANCE=<value>
 SET_RETRACTION RETRACT_LENGTH=<len> [RETRACT_SPEED=<s>] [UNRETRACT_SPEED=<s>]
+M221 S<percent>  ; extrusion multiplier (e.g., S96 = 0.96)
 ```
 
-- **ABS/ASA**: pressure_advance=0.0, retract=3.5mm (speeds inherited from printer.cfg default of 40mm/s)
+- **ABS/ASA**: pressure_advance=0.68, retract=3.5mm (speeds inherited from printer.cfg default of 40mm/s), extrusion_multiplier=0.96 (M221 S96)
 - **PETG**: pressure_advance=0.72, retract=3.8mm @ 100mm/s both directions
 - **PLA**: No overrides (oldest profile, uses printer.cfg defaults: PA=0.1, retract=3.5mm @ 40mm/s)
 
-When adding new filament profiles, always include `SET_PRESSURE_ADVANCE` and `SET_RETRACTION` in `start_filament_gcode` with calibrated values.
+When adding new filament profiles, always include `SET_PRESSURE_ADVANCE`, `SET_RETRACTION`, and `M221` in `start_filament_gcode` with calibrated values.
+
+### Klipper-first principle
+
+When a parameter exists both in PrusaSlicer and in Klipper, prefer the Klipper runtime parameter sent via `start_filament_gcode`. This allows changing values on the fly without re-slicing. Examples:
+
+- **Extrusion multiplier**: use `M221 S<pct>` in G-code instead of PrusaSlicer's `extrusion_multiplier` setting (keep that at 1).
+- **Pressure advance**: use `SET_PRESSURE_ADVANCE` instead of any slicer-side simulation.
+- **Retraction**: use `SET_RETRACTION` (firmware retraction) instead of slicer retraction settings.
+- **Fan control**: PrusaSlicer's auto-cooling is disabled (`cooling = 0`); fan speeds are set explicitly via `min_fan_speed`/`max_fan_speed`.
 
 ## Gotchas
 
@@ -238,6 +248,21 @@ When modifying PrusaSlicer profiles (`print/`, `filament/`, `printer/`):
 - Symlinks from `~/.config/PrusaSlicer/` (Linux) or `%APPDATA%\PrusaSlicer` (Windows) to this repo are already in place. Editing files here takes effect immediately.
 - If PrusaSlicer is running, it must be restarted to pick up changes.
 - No remote deployment is needed - changes are local only.
+
+When performing calibration tasks:
+
+- Keep `docs/calibration-guide-asa.md` up to date with every completed calibration step - fill in results, update current config values table, and mark completed phases. This is the single source of truth for calibration state.
+- Save all test G-code generator scripts to `docs/` for reproducibility.
+
+### Test G-code Generation Rules
+
+When generating calibration G-code with multi-object layouts (towers, cubes, column pairs):
+
+1. **Travel paths must never cross measurement zones.** If two objects form a pair with a gap to evaluate (e.g., stringing between columns), the travel move between them must detour around the objects, not fly straight through the gap. Use a waypoint below/above the pair.
+2. **Identification markers (tick marks, numbers) must start from layer 0.** Printing them only on higher layers (e.g., layers 2-4) causes them to print in mid-air with no foundation, making them unreadable. Always include layers 0+ so they bond to the bed.
+3. **Perimeter order: inner-first.** Print inner perimeters before outer. This ensures the nozzle finishes on the outer wall edge (away from any measurement gaps), and the seam blob from approach/retraction does not contaminate the gap.
+4. **Seam placement: away from measurement zones.** Place seams (retract/unretract points) on the side of each object furthest from the gap or feature being evaluated. For column pairs: left column seam on the left side, right column seam on the right side.
+5. **After every structural change to a generator script, trace the full nozzle path for one complete layer** (all objects) and verify no travel move, seam, or retract/unretract blob interferes with measurement areas.
 
 ## Commits
 
