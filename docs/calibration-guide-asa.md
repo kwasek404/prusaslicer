@@ -26,8 +26,9 @@ Based on [Ellis' Print Tuning Guide](https://ellis3dp.com/Print-Tuning-Guide/).
 | extrusion_multiplier (ASA) | **0.96** (via M221 S96 in filament gcode) | filament gcode |
 | retract_length (ASA) | **2.28mm** (via SET_RETRACTION in filament gcode) | filament gcode |
 | retract_speed / unretract_speed | **40 / 40 mm/s** (via SET_RETRACTION in filament gcode) | filament gcode |
-| max_accel | 1000 | printer.cfg [printer] |
-| input_shaper | mzv, X=35.9 Hz, Y=50.7 Hz | printer.cfg [input_shaper] |
+| max_accel | **3000** | printer.cfg [printer] |
+| input_shaper | **DISABLED** (no accelerometer, stale values after hardware changes) | printer.cfg [input_shaper] |
+| square_corner_velocity | **5** | printer.cfg [printer] |
 | hotend PID | **Kp=22.659 Ki=0.763 Kd=168.241** | printer.cfg [extruder] |
 | bed PID | **Kp=67.102 Ki=1.761 Kd=639.148** | printer.cfg [heater_bed] |
 | z_offset | **2.416** | printer.cfg [bltouch] |
@@ -36,6 +37,8 @@ Based on [Ellis' Print Tuning Guide](https://ellis3dp.com/Print-Tuning-Guide/).
 | bed_mesh probe_count | **10x10** (adaptive per print) | printer.cfg [bed_mesh] |
 | horizontal_move_z | **5** | printer.cfg [bed_mesh] |
 | first_layer_height | **0.1** | print profiles |
+| print_speed (ASA) | **60 mm/s** (uniform for all wall/infill types) | print profile (0.4mm nozzle) |
+| fan_speed (ASA) | **15%** constant (unchanged, confirmed optimal) | filament profile |
 
 ---
 
@@ -411,62 +414,75 @@ ASA is sensitive to cooling - too much causes layer delamination, too little cau
 
 **Pass**: Overhangs clean to 45 degrees at chosen speed/fan combo. Part does not delaminate when bent.
 
-> **Fan speed sweet spot**: _______________% constant
-> **Optimal print speed**: _______________mm/s
+> **Fan speed sweet spot**: **15%** constant (current setting confirmed - best balance of adhesion vs overhang quality in heated chamber)
+> **Optimal print speed**: **60 mm/s** (tower 3 - clean overhangs, no deformation/cracking; tower 1 at 20mm/s and tower 4 at 80mm/s showed deformation and cracks)
+
+**After calibration**: Updated `print/0.1 mm NORMAL (0.4 mm nozzle) @CREALITY - Kopiuj.ini` - all speed settings (perimeter, external_perimeter, infill, solid_infill, top_solid_infill, bridge, gap_fill, small_perimeter, support_material, overhang) set to **60 mm/s**. Dynamic overhang speeds disabled. Fan settings unchanged in filament profile.
 
 ---
 
-## Phase 4: Advanced (Optional)
+## Phase 4: Advanced
 
-These steps are lower priority. Complete if time permits or if issues persist after Phases 0-3.
+Input shaper disabled (no accelerometer available, values stale after hardware changes). Testing SCV and acceleration visually, then skew correction.
 
-### 4.1 Input Shaper Verification
+### 4.0 Disable Input Shaper
 
-Current: mzv, X=35.9 Hz, Y=50.7 Hz. These may have shifted if belts or rollers were adjusted.
+Old values (mzv, X=35.9 Hz, Y=50.7 Hz) potentially wrong after hardware changes. No ADXL345 accelerometer available to recalibrate.
 
-1. Run:
+1. Comment out `[input_shaper]` section in printer.cfg.
+2. Deploy and restart Klipper.
+
+> **Status**: DONE - input shaper section commented out, Klipper restarted.
+
+### 4.1 SCV/Acceleration Hybrid Test
+
+Combined test: 5 hollow cube towers, each at a different `square_corner_velocity`, with acceleration increasing in bands with Z height. Print speed stays at 60 mm/s (calibrated value) to isolate motion parameters.
+
+**Test layout** (`docs/gen_scv_accel_test.py`):
+- 5 towers at SCV = 1 / 3 / 5 / 7 / 9 mm/s
+- 6 acceleration bands (6mm each, 36mm total height): 500 / 1000 / 1500 / 2000 / 2500 / 3000 mm/s^2
+- 20x20mm hollow cubes, 2 perimeters, no infill
+- Seam on back face (Y+), ticks on front face for tower ID
+
+**Klipper commands used per object/layer**:
+```
+SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=<val>   ; per tower
+SET_VELOCITY_LIMIT ACCEL=<val>                     ; per Z band
+```
+
+**Evaluation criteria**:
+- **Corners**: ringing/ghosting pattern after sharp turns (SCV effect)
+- **Flat walls**: ripples/waves from acceleration/deceleration (accel effect)
+- Find the highest SCV and accel with acceptable surface quality
+- Compare towers at same height to isolate SCV effect
+- Compare bands within a tower to isolate accel effect
+
+**Reading results**:
+- Tower number (front ticks): 1=SCV1, 2=SCV3, 3=SCV5, 4=SCV7, 5=SCV9
+- Band index = floor(Z / 6mm): 0=500, 1=1000, 2=1500, 3=2000, 4=2500, 5=3000 mm/s^2
+
+> **Best SCV**: **5** (tower 3 - best corner quality, Klipper default)
+> **Best max_accel**: **3000** (clean even at highest band; limited only by lack of input shaper)
+
+### 4.2 Skew Correction
+
+Separate print - thin square for diagonal measurement.
+
+1. Print a 140x140mm square, 2-3 layers tall, at calibrated settings.
+2. Measure both diagonals (AC and BD) with calipers.
+3. If |AC - BD| > 0.5mm, apply correction:
    ```
-   SHAPER_CALIBRATE
-   ```
-2. This takes several minutes - the printer will vibrate at various frequencies.
-3. Klipper will recommend shaper type and frequencies.
-4. If values changed significantly (>5 Hz), save:
-   ```
+   SET_SKEW XY=<AC>,<BD>,<AD>
+   SKEW_PROFILE SAVE=my_skew_profile
    SAVE_CONFIG
    ```
-5. Klipper will also recommend a `max_accel` value - note it for step 4.2.
+4. Re-print the square and verify diagonals are now equal.
 
-> **New shaper values**: X=_______ Hz, Y=_______ Hz, type=_______
-> **Recommended max_accel**: _______
+Ref: [Klipper skew correction docs](https://www.klipper3d.org/Skew_Correction.html)
 
-### 4.2 Maximum Acceleration Test
-
-Current: 1000 mm/s^2 (very conservative).
-
-1. Note the max_accel recommended by input shaper (step 4.1).
-2. Test incrementally:
-   ```
-   SET_VELOCITY_LIMIT ACCEL=2000
-   ```
-3. Print a test cube at the new accel. Check for:
-   - Ringing/ghosting on surfaces (accel too high)
-   - Layer shifts (mechanical limit exceeded)
-   - Missed steps (listen for clicking from steppers)
-4. Increase in steps: 2000 -> 3000 -> 4000 -> max recommended.
-5. Use the highest value that produces clean prints.
-
-**Note**: With A4988 drivers (no StealthChop), you may hear more stepper noise at higher accel. This is normal. Stop only if print quality degrades or steps are lost.
-
-> **New max_accel**: _______
-
-### 4.3 Skew Correction Verification
-
-A skew profile is already saved (`my_skew_profile`). Verify it's still accurate.
-
-1. Print a calibration square (100x100mm, 1-2 layers tall).
-2. Measure diagonals with calipers.
-3. If diagonals differ by > 0.5mm, recalibrate using the [Klipper skew correction docs](https://www.klipper3d.org/Skew_Correction.html).
-4. If diagonals are equal (+/- 0.5mm), the current profile is fine.
+> **Diagonal AC**: _______ mm
+> **Diagonal BD**: _______ mm
+> **Skew correction applied**: YES / NO
 
 ---
 
@@ -482,7 +498,8 @@ Fill in after completing each phase:
 | extrusion_multiplier (ASA) | 1.0 | **0.96** (M221 S96) | YES |
 | retract_length (ASA) | 3.5 | **2.28** | YES |
 | retract_speed (ASA) | 40 | **40** (confirmed) | YES |
-| fan_speed (ASA) | 15% | | |
+| fan_speed (ASA) | 15% | **15%** (confirmed) | YES |
+| print_speed (ASA) | 15-30 mixed | **60** (uniform) | YES |
 | hotend PID (Kp/Ki/Kd) | 21.5/1.1/109 | **22.7/0.8/168** | YES |
 | bed PID (Kp/Ki/Kd) | 54.0/0.8/948 | **67.1/1.8/639** | YES |
 | axis_twist X | (none) | **10 pts, 0.146mm range** | YES |
@@ -490,8 +507,10 @@ Fill in after completing each phase:
 | bed_mesh probe_count | 50x50 | **10x10** | YES |
 | horizontal_move_z | 1 | **5** | YES |
 | first_layer_height | 0.2 | **0.1** | YES |
-| input_shaper X/Y | 35.9/50.7 mzv | | |
-| max_accel | 1000 | | |
+| input_shaper X/Y | 35.9/50.7 mzv | **DISABLED** | YES |
+| square_corner_velocity | 6 (default) | **5** | YES |
+| skew_correction | (none) | | |
+| max_accel | 1000 | **3000** | YES |
 
 ## Files to Update After Calibration
 
