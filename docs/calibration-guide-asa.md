@@ -26,9 +26,10 @@ Based on [Ellis' Print Tuning Guide](https://ellis3dp.com/Print-Tuning-Guide/).
 | extrusion_multiplier (ASA) | **0.96** (via M221 S96 in filament gcode) | filament gcode |
 | retract_length (ASA) | **2.28mm** (via SET_RETRACTION in filament gcode) | filament gcode |
 | retract_speed / unretract_speed | **40 / 40 mm/s** (via SET_RETRACTION in filament gcode) | filament gcode |
-| max_accel | **3000** | printer.cfg [printer] |
+| max_accel | **1000** (reverted from 3000 due to ringing, awaits input shaper calibration) | printer.cfg [printer] |
 | input_shaper | **DISABLED** (no accelerometer, stale values after hardware changes) | printer.cfg [input_shaper] |
 | square_corner_velocity | **5** | printer.cfg [printer] |
+| skew_correction | XY=-0.20°, XZ=0.16°, YZ=-0.89° (my_skew_profile) | printer.cfg [skew_correction] |
 | hotend PID | **Kp=22.659 Ki=0.763 Kd=168.241** | printer.cfg [extruder] |
 | bed PID | **Kp=67.102 Ki=1.761 Kd=639.148** | printer.cfg [heater_bed] |
 | z_offset | **2.416** | printer.cfg [bltouch] |
@@ -466,23 +467,29 @@ SET_VELOCITY_LIMIT ACCEL=<val>                     ; per Z band
 
 ### 4.2 Skew Correction
 
-Separate print - thin square for diagonal measurement.
+Use the official Klipper calibration model ([thing:2972743](https://www.thingiverse.com/thing:2972743)) - 3 rectangles (XY, XZ, YZ planes) in one print. Print through PrusaSlicer with standard profiles as a full integration test.
 
-1. Print a 140x140mm square, 2-3 layers tall, at calibrated settings.
-2. Measure both diagonals (AC and BD) with calipers.
-3. If |AC - BD| > 0.5mm, apply correction:
+**Before printing**: temporarily add `\nSET_SKEW CLEAR=1` to the end of `start_gcode` in the printer INI (PrusaSlicer), so old skew correction does not corrupt the calibration measurement. Remove after.
+
+1. Slice and print the model.
+2. For each plane, measure with calipers (inner-to-outer corner technique, 2-3x average):
+   - AC (diagonal)
+   - BD (diagonal)
+   - AD (reference side)
+3. Apply correction and save:
    ```
-   SET_SKEW XY=<AC>,<BD>,<AD>
+   SET_SKEW XY=<AC>,<BD>,<AD> XZ=<AC>,<BD>,<AD> YZ=<AC>,<BD>,<AD>
    SKEW_PROFILE SAVE=my_skew_profile
    SAVE_CONFIG
    ```
-4. Re-print the square and verify diagonals are now equal.
+4. Remove the temporary `SET_SKEW CLEAR=1` from printer INI.
 
 Ref: [Klipper skew correction docs](https://www.klipper3d.org/Skew_Correction.html)
 
-> **Diagonal AC**: _______ mm
-> **Diagonal BD**: _______ mm
-> **Skew correction applied**: YES / NO
+> **XY measurements**: AC=140.5, BD=141.0, AD=99.8 -> skew **-0.20°**
+> **XZ measurements**: AC=141.7, BD=141.3, AD=99.8 -> skew **0.16°**
+> **YZ measurements**: AC=140.1, BD=142.3, AD=99.5 -> skew **-0.89°** (large, confirmed: old bent Ender frame, Y-axis lacks side bracing)
+> **Skew correction applied**: YES (profile `my_skew_profile`)
 
 ---
 
@@ -509,8 +516,8 @@ Fill in after completing each phase:
 | first_layer_height | 0.2 | **0.1** | YES |
 | input_shaper X/Y | 35.9/50.7 mzv | **DISABLED** | YES |
 | square_corner_velocity | 6 (default) | **5** | YES |
-| skew_correction | (none) | | |
-| max_accel | 1000 | **3000** | YES |
+| skew_correction | (none) | **XY=-0.20°, XZ=0.16°, YZ=-0.89°** | YES |
+| max_accel | 1000 | **1000** (tested 3000, reverted due to ringing) | NO |
 
 ## Files to Update After Calibration
 
