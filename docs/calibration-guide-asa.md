@@ -490,6 +490,12 @@ Ref: [Klipper skew correction docs](https://www.klipper3d.org/Skew_Correction.ht
 > **XZ measurements**: AC=141.7, BD=141.3, AD=99.8 -> skew **0.16°**
 > **YZ measurements**: AC=140.1, BD=142.3, AD=99.5 -> skew **-0.89°** (large, confirmed: old bent Ender frame, Y-axis lacks side bracing)
 > **Skew correction applied**: YES (profile `my_skew_profile`)
+>
+> **Verification re-print** (same model, after correction):
+> - XY: AC=140.7, BD=140.8, AD=99.4 -> |AC-BD| = 0.1 mm (from 0.5)
+> - XZ: AC=141.3, BD=141.4, AD=99.8 -> |AC-BD| = 0.1 mm (from 0.4)
+> - YZ: AC=141.3, BD=141.2, AD=99.5 -> |AC-BD| = 0.1 mm (from 2.2)
+> All planes corrected to within measurement noise (~0.1 mm with calipers). Skew calibration complete.
 
 ---
 
