@@ -39,6 +39,8 @@ Based on [Ellis' Print Tuning Guide](https://ellis3dp.com/Print-Tuning-Guide/).
 | horizontal_move_z | **5** | printer.cfg [bed_mesh] |
 | first_layer_height | **0.1** | print profiles |
 | print_speed (ASA) | **60 mm/s** (uniform for all wall/infill types) | print profile (0.4mm nozzle) |
+| bridge_speed (ASA) | **20 mm/s** | print profile (0.4mm nozzle) |
+| bridge_flow_ratio (ASA) | **0.7** | print profile (0.4mm nozzle) |
 | fan_speed (ASA) | **15%** constant (unchanged, confirmed optimal) | filament profile |
 
 ---
@@ -497,6 +499,15 @@ Ref: [Klipper skew correction docs](https://www.klipper3d.org/Skew_Correction.ht
 > - YZ: AC=141.3, BD=141.2, AD=99.5 -> |AC-BD| = 0.1 mm (from 2.2)
 > All planes corrected to within measurement noise (~0.1 mm with calipers). Skew calibration complete.
 
+### 4.3 Bridge Speed/Flow Calibration
+
+5x5 matrix test: bridge_speed [20, 30, 40, 50, 60] mm/s x bridge_flow_ratio [0.7, 0.8, 0.9, 1.0, 1.1]. Each cell: 2 towers (4x10mm, 8mm tall) with 30mm air gap, 25 parallel bridge lines at z=8.4 (thick bridge, 0.4mm). Constants: 265C, bed 120/95C, fan 15%, PA=0.68, EM=0.96, retract 2.28@40.
+
+Generator: `docs/gen_bridge_matrix_test.py`
+
+> **Result**: flow=0.7, speed=20 mm/s was the only nearly perfect cell. Higher speeds and higher flow both degraded quality (more sag, less cohesive strands).
+> Applied to print profile: `bridge_flow_ratio = 0.7`, `bridge_speed = 20`.
+
 ---
 
 ## Results Summary
@@ -523,6 +534,8 @@ Fill in after completing each phase:
 | input_shaper X/Y | 35.9/50.7 mzv | **DISABLED** | YES |
 | square_corner_velocity | 6 (default) | **5** | YES |
 | skew_correction | (none) | **XY=-0.20°, XZ=0.16°, YZ=-0.89°** | YES |
+| bridge_speed | 60 | **20** | YES |
+| bridge_flow_ratio | 0.8 | **0.7** | YES |
 | max_accel | 1000 | **1000** (tested 3000, reverted due to ringing) | NO |
 
 ## Files to Update After Calibration
